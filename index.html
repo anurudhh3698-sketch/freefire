@@ -1,0 +1,218 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anurudh Battle Royale</title>
+<style>
+  body { margin:0; overflow:hidden; background:#87ceeb;
+         font-family:Arial,sans-serif; }
+  #hud { position:fixed; inset:15px 15px auto;
+         color:white; text-shadow:1px 2px 4px black;
+         pointer-events:none; }
+  #help { position:fixed; bottom:20px; left:15px;
+          color:white; text-shadow:1px 2px 4px black; }
+  #jump { position:fixed; right:20px; bottom:25px;
+          padding:16px; border:0; border-radius:12px;
+          background:#ff8c00; color:white; font-weight:bold; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <h2>ANURUDH BATTLE ROYALE</h2>
+  <div id="status">Mission: Jump from plane</div>
+  <div id="weapon">Weapon: Assault Rifle | Ammo: ∞</div>
+  <div>Health: 100 | Players: 50</div>
+</div>
+<div id="help">
+  W A S D = Move | Mouse = Look | Click = Shoot<br>
+  1, 2, 3 = Change Gun | Space = Jump
+</div>
+<button id="jump">JUMP / PARACHUTE</button>
+<script type="module">
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
+scene.fog = new THREE.Fog(0x87ceeb, 80, 350);
+
+const camera = new THREE.PerspectiveCamera(
+  75, innerWidth / innerHeight, 0.1, 1000
+);
+camera.position.set(0, 4, 10);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x536b38, 2));
+const sun = new THREE.DirectionalLight(0xffffff, 2);
+sun.position.set(30, 60, 20);
+scene.add(sun);
+
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(500, 500),
+  new THREE.MeshStandardMaterial({color:0x568044})
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -1;
+scene.add(ground);
+
+// Buildings
+for (let i = 0; i < 35; i++) {
+  const h = 3 + Math.random() * 8;
+  const building = new THREE.Mesh(
+    new THREE.BoxGeometry(5, h, 5),
+    new THREE.MeshStandardMaterial({
+      color: [0x999999, 0xb9a58a, 0x697d83][i % 3]
+    })
+  );
+  building.position.set(
+    (Math.random() - 0.5) * 150,
+    -1 + h / 2,
+    (Math.random() - 0.5) * 150
+  );
+  scene.add(building);
+}
+
+// Player body
+const player = new THREE.Group();
+const body = new THREE.Mesh(
+  new THREE.BoxGeometry(0.8, 1.8, 0.5),
+  new THREE.MeshStandardMaterial({color:0x173d75})
+);
+body.position.y = 0.0;
+player.add(body);
+player.position.set(0, 1, 0);
+scene.add(player);
+
+// A simple plane flying above the island
+const plane = new THREE.Group();
+const fuselage = new THREE.Mesh(
+  new THREE.BoxGeometry(2, 0.7, 8),
+  new THREE.MeshStandardMaterial({color:0xdddddd})
+);
+plane.add(fuselage);
+const wings = new THREE.Mesh(
+  new THREE.BoxGeometry(12, 0.2, 2),
+  new THREE.MeshStandardMaterial({color:0x333333})
+);
+plane.add(wings);
+plane.position.set(0, 45, -30);
+scene.add(plane);
+
+const guns = ["Assault Rifle", "Shotgun", "Sniper Rifle"];
+let gunIndex = 0;
+let jumping = false;
+let parachute = false;
+let verticalSpeed = 0;
+const keys = {};
+let yaw = 0;
+let pitch = 0;
+
+addEventListener("keydown", e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === " ") jump();
+  if (["1","2","3"].includes(e.key)) {
+    gunIndex = Number(e.key) - 1;
+    document.querySelector("#weapon").textContent =
+      `Weapon: ${guns[gunIndex]} | Ammo: ∞`;
+  }
+});
+addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+function jump() {
+  if (!jumping) {
+    jumping = true;
+    parachute = false;
+    player.position.y = 40;
+    verticalSpeed = 0;
+    document.querySelector("#status").textContent =
+      "Jumping from airplane!";
+  } else if (!parachute) {
+    parachute = true;
+    document.querySelector("#status").textContent =
+      "Parachute deployed!";
+  }
+}
+document.querySelector("#jump").onclick = jump;
+
+// Click to look around
+renderer.domElement.addEventListener("click", () => {
+  renderer.domElement.requestPointerLock?.();
+});
+addEventListener("mousemove", e => {
+  if (document.pointerLockElement === renderer.domElement) {
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-1, Math.min(1, pitch));
+  }
+});
+
+// Shooting visual: a short ray, not a full combat system
+addEventListener("mousedown", () => {
+  if (document.pointerLockElement !== renderer.domElement) return;
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const hit = ray.intersectObjects(scene.children, true);
+  if (hit.length) {
+    document.querySelector("#status").textContent = "Firing!";
+  }
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  plane.position.x += 0.12;
+  if (plane.position.x > 150) plane.position.x = -150;
+
+  if (jumping) {
+    verticalSpeed -= 0.012;
+    if (parachute) verticalSpeed = Math.max(verticalSpeed, -0.08);
+    player.position.y += verticalSpeed;
+
+    if (player.position.y <= 1) {
+      player.position.y = 1;
+      jumping = false;
+      parachute = false;
+      verticalSpeed = 0;
+      document.querySelector("#status").textContent =
+        "Landed! Explore the battlefield.";
+    }
+  }
+
+  const speed = jumping ? 0.12 : 0.22;
+  const forward = new THREE.Vector3(-Math.sin(yaw), 0,
+                                     -Math.cos(yaw));
+  const right = new THREE.Vector3(Math.cos(yaw), 0,
+                                  -Math.sin(yaw));
+  if (keys.w) player.position.addScaledVector(forward, speed);
+  if (keys.s) player.position.addScaledVector(forward, -speed);
+  if (keys.a) player.position.addScaledVector(right, -speed);
+  if (keys.d) player.position.addScaledVector(right, speed);
+
+  camera.position.set(
+    player.position.x + Math.sin(yaw) * 6,
+    player.position.y + 3 + pitch,
+    player.position.z + Math.cos(yaw) * 6
+  );
+  camera.lookAt(
+    player.position.x, player.position.y + 1,
+    player.position.z
+  );
+
+  renderer.render(scene, camera);
+}
+animate();
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
